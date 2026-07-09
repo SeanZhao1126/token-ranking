@@ -703,6 +703,12 @@ body {
   padding: 8px 0 0;
 }
 .loading-inline.show { display: block; }
+.loading-auto {
+  display: none;
+  text-align: center;
+  padding: 12px 0;
+}
+.loading-auto.show { display: block; }
 .spinner {
   width: 40px; height: 40px;
   border: 3px solid rgba(108,99,255,0.15);
@@ -745,7 +751,7 @@ body {
 
 <div class="header">
   <h1>✦ Token 消耗排名</h1>
-  <p>导入 CSV 数据，直观查看每个账号的 API 消耗情况</p>
+  <p>自动加载云端数据，也支持手动上传 CSV 文件</p>
   <div class="upload-area">
     <div class="drop-zone" id="dropZone">
       <span class="icon">📊</span>
@@ -754,6 +760,7 @@ body {
       <div class="file-info" id="fileInfo"></div>
       <div class="loading-inline" id="loadingInline"><div class="spinner"></div><p style="margin:0;font-size:0.65rem;color:var(--text2);">解析中...</p></div>
     </div>
+    <div class="loading-auto" id="loadingAuto"><div class="spinner"></div><p style="margin:0;font-size:0.8rem;color:var(--text2);">加载云端数据中...</p></div>
   </div>
 </div>
 
@@ -1807,25 +1814,35 @@ function renderRankTable(accounts, totalCost) {
   }).join('') + totalRow;
 }
 
-// ==================== FILE HANDLING ====================
-const dropZone = document.getElementById('dropZone');
-const fileInput = document.getElementById('fileInput');
-const loadingInline = document.getElementById('loadingInline');
+// ==================== CLOUD DATA LOADING ====================
+const loadingAuto = document.getElementById('loadingAuto');
 
-// Try to restore from localStorage on page load
-(function restoreFromStorage() {
+// Load CSV from GitHub raw URL
+async function loadCloudData() {
+  // GitHub raw URL — 每次更新 token-data.csv 后推送即可
+  const githubUrl = 'https://raw.githubusercontent.com/SeanZhao1126/token-ranking/main/token-data.csv';
+  // 或用 Vercel 同目录: const githubUrl = '/token-data.csv';
+
+  loadingAuto.classList.add('show');
+
   try {
-    const saved = localStorage.getItem('token_ranking_data');
-    if (!saved) return;
-    const json = JSON.parse(saved);
-    rawData = json.rawData;
+    const response = await fetch(githubUrl + '?t=' + Date.now());
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const text = await response.text();
+    rawData = parseCSV(text);
+
+    if (rawData.length === 0) throw new Error('Empty data');
+
     const stats = processData(rawData);
     window._currentStats = stats;
+
     const fi = document.getElementById('fileInfo');
-    fi.textContent = `✅ ${json.fileName} — ${rawData.length} 条记录，${Object.keys(stats.accounts).length} 个账号，${stats.dailyTotals.length} 天数据`;
-    fi.style.display = 'block';
+    fi.textContent = '✅ 云端数据已加载';
+    fi.style.display = 'inline';
     dropZone.classList.add('file-loaded');
     dropZone.querySelector('h2').textContent = '';
+
+    loadingAuto.classList.remove('show');
     destroyCharts();
     renderDashboard(stats);
     setTimeout(particleBurst, 400);
@@ -1833,10 +1850,19 @@ const loadingInline = document.getElementById('loadingInline');
       document.getElementById('overview').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 300);
   } catch(e) {
-    console.warn('Restore from localStorage failed:', e);
-    localStorage.removeItem('token_ranking_data');
+    loadingAuto.classList.remove('show');
+    console.warn('Cloud data load failed:', e.message);
+    // Gracefully degrade — user can still upload manually
   }
-})();
+}
+
+// Auto-load on page open
+loadCloudData();
+
+// ==================== FILE HANDLING ====================
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const loadingInline = document.getElementById('loadingInline');
 
 dropZone.addEventListener('click', () => fileInput.click());
 
@@ -1878,16 +1904,6 @@ async function handleFile(file) {
 
     const stats = processData(rawData);
     window._currentStats = stats;
-
-    // Save to localStorage (serialize rawData)
-    try {
-      localStorage.setItem('token_ranking_data', JSON.stringify({
-        fileName: file.name,
-        rawData: rawData
-      }));
-    } catch(e) {
-      console.warn('Failed to save to localStorage:', e);
-    }
 
     // Show file info
     const fi = document.getElementById('fileInfo');
