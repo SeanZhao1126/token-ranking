@@ -697,6 +697,12 @@ body {
   padding: 20px;
 }
 .loading.show { display: block; }
+.loading-inline {
+  display: none;
+  text-align: center;
+  padding: 8px 0 0;
+}
+.loading-inline.show { display: block; }
 .spinner {
   width: 40px; height: 40px;
   border: 3px solid rgba(108,99,255,0.15);
@@ -746,8 +752,8 @@ body {
       <h2>上传 CSV</h2>
       <input type="file" id="fileInput" accept=".csv">
       <div class="file-info" id="fileInfo"></div>
+      <div class="loading-inline" id="loadingInline"><div class="spinner"></div><p style="margin:0;font-size:0.65rem;color:var(--text2);">解析中...</p></div>
     </div>
-    <div class="loading" id="loading"><div class="spinner"></div><p style="margin:0;font-size:0.8rem;color:var(--text2);">加载中...</p></div>
   </div>
 </div>
 
@@ -1804,7 +1810,7 @@ function renderRankTable(accounts, totalCost) {
 // ==================== FILE HANDLING ====================
 const dropZone = document.getElementById('dropZone');
 const fileInput = document.getElementById('fileInput');
-const loading = document.getElementById('loading');
+const loadingInline = document.getElementById('loadingInline');
 
 dropZone.addEventListener('click', () => fileInput.click());
 
@@ -1831,46 +1837,51 @@ async function handleFile(file) {
     return;
   }
 
-  loading.classList.add('show');
+  loadingInline.classList.add('show');
 
-  // Simulate processing delay for animation
-  await new Promise(r => setTimeout(r, 600));
+  try {
+    const text = await file.text();
+    console.log('CSV text length:', text.length);
+    console.log('First 200 chars:', text.substring(0, 200));
 
-  const text = await file.text();
-  rawData = parseCSV(text);
+    rawData = parseCSV(text);
+    console.log('Parsed rows:', rawData.length);
 
-  if (rawData.length === 0) {
-    loading.classList.remove('show');
-    alert('未能解析到有效数据，请检查 CSV 格式');
-    return;
+    if (rawData.length === 0) {
+      loadingInline.classList.remove('show');
+      alert('未能解析到有效数据，请检查 CSV 格式。\n\n请确认文件是从 DeepSeek API Dashboard 导出的用量 CSV。');
+      return;
+    }
+
+    const stats = processData(rawData);
+    window._currentStats = stats;
+
+    // Show file info
+    const fi = document.getElementById('fileInfo');
+    fi.textContent = `✅ ${file.name} — ${rawData.length} 条记录，${Object.keys(stats.accounts).length} 个账号，${stats.dailyTotals.length} 天数据`;
+    fi.style.display = 'block';
+    dropZone.classList.add('file-loaded');
+
+    // Update drop zone text
+    dropZone.querySelector('h2').textContent = '';
+
+    loadingInline.classList.remove('show');
+
+    // Destroy old charts first
+    destroyCharts();
+
+    renderDashboard(stats);
+    setTimeout(particleBurst, 400);
+
+    // Scroll to overview
+    setTimeout(() => {
+      document.getElementById('overview').scrollIntoView({ behavior: 'smooth' });
+    }, 300);
+  } catch(e) {
+    loadingInline.classList.remove('show');
+    console.error('Error loading file:', e);
+    alert('加载文件失败: ' + e.message);
   }
-
-  const stats = processData(rawData);
-  window._currentStats = stats;
-
-  // Show file info
-  const fi = document.getElementById('fileInfo');
-  fi.textContent = `✅ ${file.name} — ${rawData.length} 条记录，${Object.keys(stats.accounts).length} 个账号，${stats.dailyTotals.length} 天数据`;
-  fi.style.display = 'block';
-  dropZone.classList.add('file-loaded');
-
-  // Update drop zone text
-  dropZone.querySelector('h2').textContent = '';
-  dropZone.querySelector('p').textContent = '支持任意格式的 DeepSeek API 用量 CSV';
-
-  loading.classList.remove('show');
-
-  // Destroy old charts first
-  destroyCharts();
-
-  renderDashboard(stats);
-      // Trigger particle burst
-      setTimeout(particleBurst, 400);
-
-  // Scroll to overview
-  setTimeout(() => {
-    document.getElementById('overview').scrollIntoView({ behavior: 'smooth' });
-  }, 300);
 }
 
 </script>
