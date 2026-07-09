@@ -150,31 +150,6 @@ body {
   border-color: var(--accent3);
   background: rgba(67,233,123,0.08);
 }
-/* Remote load button */
-.remote-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 12px;
-  border-radius: 14px;
-  cursor: pointer;
-  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-  background: linear-gradient(135deg, rgba(0,212,255,0.15), rgba(108,99,255,0.10));
-  border: 1px solid rgba(0,212,255,0.25);
-  backdrop-filter: blur(8px);
-  white-space: nowrap;
-  color: var(--text);
-  font-size: 0.68rem;
-  font-weight: 600;
-  margin-left: 8px;
-  font-family: inherit;
-}
-.remote-btn:hover {
-  border-color: #00d4ff;
-  background: linear-gradient(135deg, rgba(0,212,255,0.25), rgba(108,99,255,0.18));
-  transform: scale(1.05);
-  box-shadow: 0 0 30px rgba(0,212,255,0.2);
-}
 /* Hidden full-area drag overlay for drag-drop */
 #dragOverlay {
   display: none;
@@ -772,7 +747,6 @@ body {
       <input type="file" id="fileInput" accept=".csv">
       <div class="file-info" id="fileInfo"></div>
     </div>
-    <button class="remote-btn" id="remoteBtn" title="加载同目录下的 token-data.csv">🔄 刷新数据</button>
     <div class="loading" id="loading"><div class="spinner"></div><p style="margin:0;font-size:0.8rem;color:var(--text2);">加载中...</p></div>
   </div>
 </div>
@@ -1898,86 +1872,6 @@ async function handleFile(file) {
     document.getElementById('overview').scrollIntoView({ behavior: 'smooth' });
   }, 300);
 }
-
-
-// ==================== REMOTE DATA LOADING ====================
-// 数据文件名，放在与 HTML 同一目录下
-const CSV_FILE = 'token-data.csv';
-
-// ==================== AUTO-LOAD ON PAGE OPEN ====================
-(async function autoLoad() {
-  loading.classList.add('show');
-
-  try {
-    const response = await fetch(CSV_FILE);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const text = await response.text();
-    rawData = parseCSV(text);
-
-    if (rawData.length === 0) throw new Error('Empty data');
-
-    const stats = processData(rawData);
-    window._currentStats = stats;
-
-    const fi = document.getElementById('fileInfo');
-    fi.textContent = '✅ 已加载最新';
-    fi.style.display = 'inline';
-    dropZone.classList.add('file-loaded');
-    dropZone.querySelector('h2').textContent = '';
-
-    loading.classList.remove('show');
-    await new Promise(r => setTimeout(r, 300));
-    destroyCharts();
-    renderDashboard(stats);
-    setTimeout(particleBurst, 400);
-    setTimeout(function() {
-      document.getElementById('overview').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 200);
-  } catch(e) {
-    loading.classList.remove('show');
-    console.warn('Auto-load failed:', e.message);
-    // Gracefully degrade — user can still upload manually
-  }
-})();
-
-// ==================== REFRESH BUTTON ====================
-document.getElementById('remoteBtn').addEventListener('click', async function() {
-  loading.classList.add('show');
-  this.disabled = true;
-
-  try {
-    // 加时间戳防止浏览器缓存
-    const timestamp = new Date().getTime();
-    const response = await fetch(CSV_FILE + '?t=' + timestamp);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const text = await response.text();
-    rawData = parseCSV(text);
-
-    if (rawData.length === 0) throw new Error('Empty data');
-
-    const stats = processData(rawData);
-    window._currentStats = stats;
-
-    const fi = document.getElementById('fileInfo');
-    fi.textContent = '✅ 数据已更新';
-    fi.style.display = 'inline';
-    dropZone.classList.add('file-loaded');
-    dropZone.querySelector('h2').textContent = '';
-
-    loading.classList.remove('show');
-    destroyCharts();
-    renderDashboard(stats);
-    setTimeout(particleBurst, 400);
-    setTimeout(function() {
-      document.getElementById('overview').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 200);
-  } catch(e) {
-    loading.classList.remove('show');
-    alert('刷新数据失败: ' + e.message + '\n\n请确认 ' + CSV_FILE + ' 文件存在且格式正确，或改用手动上传。');
-  } finally {
-    this.disabled = false;
-  }
-});
 
 </script>
 
