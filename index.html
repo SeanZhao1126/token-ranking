@@ -167,56 +167,6 @@ body {
 }
 #dragOverlay.show { display: flex; }
 
-/* Cloud config */
-.cloud-config {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 8px;
-  justify-content: center;
-}
-.cloud-config input {
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 10px;
-  padding: 6px 12px;
-  color: var(--text);
-  font-size: 0.75rem;
-  outline: none;
-  width: 200px;
-  font-family: 'Courier New', monospace;
-}
-.cloud-config input:focus {
-  border-color: var(--accent);
-}
-.save-pat-btn, .upload-cloud-btn {
-  padding: 6px 14px;
-  border-radius: 10px;
-  border: 1px solid rgba(108,99,255,0.25);
-  background: rgba(108,99,255,0.1);
-  color: var(--text);
-  font-size: 0.75rem;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  font-family: inherit;
-}
-.save-pat-btn:hover {
-  background: rgba(108,99,255,0.2);
-  border-color: var(--accent);
-}
-.upload-cloud-btn {
-  background: linear-gradient(135deg, rgba(0,212,255,0.15), rgba(108,99,255,0.10));
-  border: 1px solid rgba(0,212,255,0.25);
-}
-.upload-cloud-btn:hover {
-  border-color: #00d4ff;
-  box-shadow: 0 0 20px rgba(0,212,255,0.2);
-}
-.upload-cloud-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 /* Stats Overview */
 .stats-overview {
   position: relative;
@@ -811,11 +761,6 @@ body {
       <div class="loading-inline" id="loadingInline"><div class="spinner"></div><p style="margin:0;font-size:0.65rem;color:var(--text2);">解析中...</p></div>
     </div>
     <div class="loading-auto" id="loadingAuto"><div class="spinner"></div><p style="margin:0;font-size:0.8rem;color:var(--text2);">加载云端数据中...</p></div>
-    <div class="cloud-config" id="cloudConfig">
-      <input type="password" id="patInput" placeholder="GitHub PAT (ghp_xxxx)">
-      <button class="save-pat-btn" id="savePatBtn">保存</button>
-      <button class="upload-cloud-btn" id="uploadCloudBtn" style="display:none;">☁️ 上传到云端</button>
-    </div>
   </div>
 </div>
 
@@ -1869,160 +1814,42 @@ function renderRankTable(accounts, totalCost) {
   }).join('') + totalRow;
 }
 
-// ==================== CLOUD CONFIGURATION ====================
-const loadingAuto = document.getElementById('loadingAuto');
-const patInput = document.getElementById('patInput');
-const savePatBtn = document.getElementById('savePatBtn');
-const uploadCloudBtn = document.getElementById('uploadCloudBtn');
-
-const REPO_OWNER = 'SeanZhao1126';
-const REPO_NAME = 'token-ranking';
-const ASSET_NAME = 'token-data.csv';
-
-// Load saved PAT
-(function initCloudConfig() {
-  const savedPat = localStorage.getItem('github_pat');
-  const savedRepo = localStorage.getItem('github_repo');
-  if (savedRepo) {
-    const parts = savedRepo.split('/');
-    window._repoOwner = parts[0];
-    window._repoName = parts[1];
-  } else {
-    window._repoOwner = REPO_OWNER;
-    window._repoName = REPO_NAME;
-  }
-  if (savedPat) {
-    patInput.value = savedPat;
-    uploadCloudBtn.style.display = 'inline-flex';
-    savePatBtn.textContent = '已保存 ✓';
-  }
-})();
-
-// Save PAT
-savePatBtn.addEventListener('click', () => {
-  const token = patInput.value.trim();
-  if (!token) {
-    alert('请输入 GitHub Personal Access Token');
-    return;
-  }
-  localStorage.setItem('github_pat', token);
-  uploadCloudBtn.style.display = 'inline-flex';
-  savePatBtn.textContent = '已保存 ✓';
-  savePatBtn.disabled = true;
-  setTimeout(() => { savePatBtn.textContent = '保存'; savePatBtn.disabled = false; }, 2000);
-});
-
-// Upload CSV to GitHub Releases
-uploadCloudBtn.addEventListener('click', async () => {
-  const token = localStorage.getItem('github_pat');
-  if (!token) {
-    alert('请先输入并保存 GitHub PAT');
-    return;
-  }
-
-  const fileInput = document.getElementById('fileInput');
-  if (!fileInput.files.length) {
-    alert('请先选择要上传的 CSV 文件');
-    return;
-  }
-
-  const file = fileInput.files[0];
-  if (!file.name.endsWith('.csv')) {
-    alert('请选择 CSV 文件');
-    return;
-  }
-
-  uploadCloudBtn.disabled = true;
-  uploadCloudBtn.textContent = '上传中...';
-
-  try {
-    // Step 1: Find or create a release
-    let releaseUrl;
-    let releases = await fetch(`https://api.github.com/repos/${window._repoOwner}/${window._repoName}/releases`, {
-      headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github.v3+json' }
-    }).then(r => r.json());
-
-    let release = releases.find(r => r.tag_name === 'latest');
-    if (!release) {
-      // Create new release
-      const createResp = await fetch(`https://api.github.com/repos/${window._repoOwner}/${window._repoName}/releases`, {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Bearer ' + token,
-          'Accept': 'application/vnd.github.v3+json',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ tag_name: 'latest', name: 'Latest Data', draft: true, prerelease: false })
-      });
-      if (!createResp.ok) throw new Error('创建 Release 失败: ' + createResp.status);
-      release = await createResp.json();
-    }
-    releaseUrl = release.upload_url;
-
-    // Step 2: Upload asset
-    const uploadUrl = releaseUrl.replace('{?name,label}', `?name=${ASSET_NAME}`);
-    const uploadResp = await fetch(uploadUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + token,
-        'Content-Type': 'application/octet-stream',
-        'Content-Length': file.size
-      },
-      body: file
-    });
-
-    if (!uploadResp.ok) throw new Error('上传文件失败: ' + uploadResp.status);
-
-    // Step 3: Publish release
-    await fetch(release.url, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': 'Bearer ' + token,
-        'Accept': 'application/vnd.github.v3+json',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ draft: false })
-    });
-
-    alert('✅ 上传成功！数据已保存到 GitHub Releases。\n\n其他人打开页面将自动加载最新数据。');
-    // Reload to show new data
-    window.location.reload();
-
-  } catch(e) {
-    alert('上传失败: ' + e.message + '\n\n请确认 PAT 有 repo 权限。');
-  } finally {
-    uploadCloudBtn.disabled = false;
-    uploadCloudBtn.textContent = '☁️ 上传到云端';
-  }
-});
-
 // ==================== CLOUD DATA LOADING ====================
+const loadingAuto = document.getElementById('loadingAuto');
 
 // Load CSV from GitHub Releases
 async function loadCloudData() {
-  const token = localStorage.getItem('github_pat');
-  let downloadUrl = `https://api.github.com/repos/${window._repoOwner}/${window._repoName}/releases/latest/assets/1`;
+  const owner = 'SeanZhao1126';
+  const repo = 'token-ranking';
+  const assetName = 'token-data.csv';
+
+  // Try GitHub Releases API first
+  let downloadUrl = '';
+  try {
+    const resp = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases/latest`, {
+      headers: { 'Accept': 'application/vnd.github.v3+json' }
+    });
+    if (resp.ok) {
+      const release = await resp.json();
+      const asset = release.assets?.find(a => a.name === assetName);
+      if (asset) {
+        downloadUrl = asset.browser_download_url;
+      }
+    }
+  } catch(e) { /* ignore */ }
+
+  // Fallback: try raw URL
+  if (!downloadUrl) {
+    downloadUrl = `https://raw.githubusercontent.com/${owner}/${repo}/main/${assetName}`;
+  }
+
+  loadingAuto.classList.add('show');
 
   try {
-    const resp = await fetch(downloadUrl, {
-      headers: token ? { 'Authorization': 'Bearer ' + token } : {}
-    });
-
-    if (!resp.ok) {
-      // Try raw GitHub URL as fallback
-      downloadUrl = `https://github.com/${window._repoOwner}/${window._repoName}/releases/download/latest/${ASSET_NAME}`;
-      const rawResp = await fetch(downloadUrl);
-      if (!rawResp.ok) throw new Error('HTTP ' + rawResp.status);
-      const text = await rawResp.text();
-      rawData = parseCSV(text);
-    } else {
-      const data = await resp.json();
-      const csvUrl = data.browser_download_url;
-      const csvResp = await fetch(csvUrl);
-      if (!csvResp.ok) throw new Error('HTTP ' + csvResp.status);
-      const text = await csvResp.text();
-      rawData = parseCSV(text);
-    }
+    const csvResp = await fetch(downloadUrl + '?t=' + Date.now());
+    if (!csvResp.ok) throw new Error('HTTP ' + csvResp.status);
+    const text = await csvResp.text();
+    rawData = parseCSV(text);
 
     if (rawData.length === 0) throw new Error('Empty data');
 
