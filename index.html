@@ -1812,6 +1812,32 @@ const dropZone = document.getElementById('dropZone');
 const fileInput = document.getElementById('fileInput');
 const loadingInline = document.getElementById('loadingInline');
 
+// Try to restore from localStorage on page load
+(function restoreFromStorage() {
+  try {
+    const saved = localStorage.getItem('token_ranking_data');
+    if (!saved) return;
+    const json = JSON.parse(saved);
+    rawData = json.rawData;
+    const stats = processData(rawData);
+    window._currentStats = stats;
+    const fi = document.getElementById('fileInfo');
+    fi.textContent = `✅ ${json.fileName} — ${rawData.length} 条记录，${Object.keys(stats.accounts).length} 个账号，${stats.dailyTotals.length} 天数据`;
+    fi.style.display = 'block';
+    dropZone.classList.add('file-loaded');
+    dropZone.querySelector('h2').textContent = '';
+    destroyCharts();
+    renderDashboard(stats);
+    setTimeout(particleBurst, 400);
+    setTimeout(() => {
+      document.getElementById('overview').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 300);
+  } catch(e) {
+    console.warn('Restore from localStorage failed:', e);
+    localStorage.removeItem('token_ranking_data');
+  }
+})();
+
 dropZone.addEventListener('click', () => fileInput.click());
 
 dropZone.addEventListener('dragover', e => {
@@ -1841,11 +1867,8 @@ async function handleFile(file) {
 
   try {
     const text = await file.text();
-    console.log('CSV text length:', text.length);
-    console.log('First 200 chars:', text.substring(0, 200));
 
     rawData = parseCSV(text);
-    console.log('Parsed rows:', rawData.length);
 
     if (rawData.length === 0) {
       loadingInline.classList.remove('show');
@@ -1855,6 +1878,16 @@ async function handleFile(file) {
 
     const stats = processData(rawData);
     window._currentStats = stats;
+
+    // Save to localStorage (serialize rawData)
+    try {
+      localStorage.setItem('token_ranking_data', JSON.stringify({
+        fileName: file.name,
+        rawData: rawData
+      }));
+    } catch(e) {
+      console.warn('Failed to save to localStorage:', e);
+    }
 
     // Show file info
     const fi = document.getElementById('fileInfo');
